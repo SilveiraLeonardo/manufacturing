@@ -22,7 +22,7 @@ class ModelGeneratorNS:
 	#
 	# in the basic version, the node and edge attributes will be the same for all the network elements
 	
-	def __init__(self, n, s, first_step = -1, last_step = -1, failure_rate=0.1, buffer_size=1, production_rate=1):
+	def __init__(self, n, s, first_step = -1, last_step = -1, failure_rate=0.1, buffer_size=1, production_rate=1, production_level="constant", production_delta=0.1):
 		# network parameters
 		self.n = n
 		self.p_steps = s
@@ -31,6 +31,8 @@ class ModelGeneratorNS:
 		self.production_rate = production_rate
 		self.first_step = first_step
 		self.last_step = last_step
+		self.production_level = production_level # constant || uniform || decrescent
+		self.production_delta = production_delta
 
 	def generate_graph(self):
 
@@ -137,13 +139,6 @@ class ModelGeneratorNS:
 			buffer_size_list.append(self.buffer_size)
 			production_step_list.append(ws_next_node)
 
-		# update the vertex attribute dictionary
-		vertex_attr["failure_rate"] = failure_rate_list
-		vertex_attr["production_rate"] = production_rate_list
-		vertex_attr["label"] = label_list
-		vertex_attr["buffer_size"] = buffer_size_list
-		vertex_attr["production_step"] = production_step_list
-
 		# a node from production step i need to receive supplies from
 		# all nodes in the preceding production step, and supply for all node in the
 		# sucedding production step
@@ -156,5 +151,42 @@ class ModelGeneratorNS:
 			for node in work_stations[step]:
 				for next_node in work_stations[step+1]:
 					production_edges.append([node, next_node])
+
+		# check if the production level has any special characteristic
+		if self.production_level == "uniform":
+			print("[INFO] production level uniform for all production steps selected...")
+			for step in range(self.p_steps):
+				# number of machines in that step
+				n_machines = len(work_stations[step])
+				# production rate for each machine in that step
+				p_rate = self.production_rate / n_machines
+
+				for node in work_stations[step]:
+					# update production rate for that node
+					production_rate_list[node] = p_rate
+		
+		elif self.production_level == "decrescent":
+			print("[INFO] decrescent production level selected...")
+			# calculate initial production rate and delta production rate
+			initial_prod_rate = self.production_rate * (1+self.production_delta)
+			delta_prod_rate = initial_prod_rate - self.production_rate
+
+			for step in range(self.p_steps):
+				# number of machines in that step
+				n_machines = len(work_stations[step])
+				# calculate production rate for the production step
+				p_rate = initial_prod_rate - (step*delta_prod_rate)/(self.p_steps-1)
+				p_rate = p_rate / n_machines
+
+				for node in work_stations[step]:
+					# update production rate for that node
+					production_rate_list[node] = p_rate
+
+		# update the vertex attribute dictionary
+		vertex_attr["failure_rate"] = failure_rate_list
+		vertex_attr["production_rate"] = production_rate_list
+		vertex_attr["label"] = label_list
+		vertex_attr["buffer_size"] = buffer_size_list
+		vertex_attr["production_step"] = production_step_list
 
 		return work_stations, production_edges, vertex_attr

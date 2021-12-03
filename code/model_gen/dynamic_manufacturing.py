@@ -12,15 +12,20 @@ class DynamicManufacturing:
 		self.time = 0
 
 		self.buffer = np.array([0.0 for i in range(network.vcount())])
+		self.buffer_occupation = np.array([0.0 for i in range(network.vcount())])
 		self.state = np.array(["starved" for i in range(network.vcount())])
+		self.last_state = np.array([0 for i in range(network.vcount())])  # array used to check if the nodes are changing state
 		self.state_id = np.array([0 for i in range(network.vcount())]) 
 		# 0 -> starved / 1 -> blocked / 2 -> working
+
+		# calculate the topological sorting only once
+		self.sorted_nodes_list = self.network.topological_sorting()
 
 		# random number generator
 		# the numbers generated are smaller than 1
 		self.rng = np.random.default_rng(seed=seed)
 
-	def iterate(self, output):
+	def iterate(self, output, write2file=False):
 		# output is a file to output data from the simulation
 
 		# initialize production
@@ -28,7 +33,8 @@ class DynamicManufacturing:
 
 		# write the header to the file
 		if self.time == 0:
-			output.write("time,vertex,state,state_id,buffer,production_step\n")
+			#output.write("time,vertex,state,state_id,buffer_occupation,production_step\n")
+			output.write("time,starved,blocked,working\n")
 
 		# increase time
 		self.time = self.time + 1
@@ -39,9 +45,17 @@ class DynamicManufacturing:
 		buffer_size = np.array(self.network.vs["buffer_size"])
 		production_step = np.array(self.network.vs["production_step"])
 
+		# initialize state array, with all nodes working
+		state_array = np.array([2.0 for i in range(np.max(production_step)+1)])
+
+		# initialize the count of starved, blocked and working nodes
+		zero_count = 0
+		one_count = 0
+		two_count = 0
+
 		# loop through the nodes in the network sorted in
 		# topological order
-		for i in self.network.topological_sorting():
+		for i in self.sorted_nodes_list:
 			# calculate the in and out edges of node i
 			# and make a list of in and out nodes linked to the node
 			in_nodes = [self.network.get_edgelist()[edge.index][0] for edge in self.network.vs[i].in_edges()]
@@ -55,6 +69,9 @@ class DynamicManufacturing:
 				self.state[i] = "blocked"
 				self.state_id[i] = 1
 				# 0 -> starved / 1 -> blocked / 2 -> working
+				if (state_array[production_step[i]] == 2):
+					# change it only if it's was working, to blocked
+					state_array[production_step[i]] = 1;
 
 			# if it is a node in the first production step, it is not starved
 			elif len(in_nodes) == 0:
@@ -67,11 +84,20 @@ class DynamicManufacturing:
 				self.state[i] = "starved"
 				self.state_id[i] = 0
 				# 0 -> starved / 1 -> blocked / 2 -> working
+				state_array[production_step[i]] = 0;
 
 			else:
 				self.state[i] = "working"
 				self.state_id[i] = 2
 				# 0 -> starved / 1 -> blocked / 2 -> working
+
+			# update the count of the node state
+			if self.state_id[i] == 0:
+				zero_count = zero_count + 1
+			elif self.state_id[i] == 1:
+				one_count = one_count + 1
+			elif self.state_id[i] == 2:
+				two_count = two_count + 1
 
 			# check if the machine is working and does not experience failure
 			if self.state[i] == "working" and self.rng.random() > frate[i]:
@@ -104,12 +130,21 @@ class DynamicManufacturing:
 				# the production of the whole process
 				else:
 					total_production = total_production + production
-					print("[INFO] production: {}".format(total_production))
 
-			# write status to file
-			output.write("{},{},{},{},{},{}\n".format(self.time, ids[i], self.state[i], self.state_id[i], self.buffer[i], production_step[i]))
+				self.buffer_occupation[i] = self.buffer[i]/buffer_size[i]
 
-		return total_production
+		# write status to file
+		if write2file:
+			output.write("{},{},{},{}\n".format(self.time, zero_count, one_count, two_count))
+			#output.write("{},{},{},{},{},{}\n".format(self.time, ids[i], self.state[i], self.state_id[i], self.buffer_occupation[i], production_step[i]))
+
+		# check how many nodes changed their ID
+		#zero_count = self.state_id.tolist().count(0)
+		#one_count = self.state_id.tolist().count(1)
+		#two_count = self.state_id.tolist().count(2)
+
+		#return total_production, zero_count, one_count, two_count, state_array
+		return total_production, zero_count, one_count, two_count, state_array
 
 
 

@@ -63,17 +63,19 @@ class ModelGenerator:
 		label_list = []
 
 		for step in range(int(p_steps)):
+
 			# create a empty node_list
 			node_list = []
 			# append one node to the list
 			node_list.append(node_index)
+			# append the list into the work stations dictionary
+			work_stations[step] = node_list
+
 			# update the node_index and the vertex attribute list
 			label_list.append(node_index)
 			node_index = node_index	+ 1
 			failure_rate_list.append(self.failure_rate)
 			production_rate_list.append(self.production_rate)
-			# append the list into the work stations dictionary
-			work_stations[step] = node_list
 
 		# now while there are node not yet assigned to any production step
 		# assign the with uniform distribution
@@ -82,8 +84,9 @@ class ModelGenerator:
 
 			# draw a sample from the uniform distribution
 			r_uniform = np.random.default_rng().uniform(0,p_steps,1)
-			# the workstation for the next node will be the floor of the sample
+			# the production step for the next node will be the floor of the sample
 			ws_next_node = int(np.floor(r_uniform))
+			# append the new node to the respective node list
 			work_stations[ws_next_node].append(node_index)
 			# update node index and attribute lists
 			label_list.append(node_index)
@@ -107,6 +110,8 @@ class ModelGenerator:
 
 		# create array of edges
 		production_edges = []
+		# range(p_steps-1) because it is creating edges between the present step and the next
+		# and the last production step does not have a next step
 		for step in (range(int(p_steps)-1)):
 			for node in work_stations[step]:
 				for next_node in work_stations[step+1]:
